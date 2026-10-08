@@ -1,0 +1,67 @@
+name: Bangun OFA (Foss Debug)
+run-name: Bangun OFA - APK Foss Debug (Bisa Install di HP Lain)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+    steps:
+      - name: Ambil kode
+        uses: actions/checkout@v4
+      
+      - name: Siapkan Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Pasang Android SDK & NDK
+        run: |
+          SDK_DIR="/usr/local/lib/android/sdk"
+          rm -rf "$SDK_DIR/ndk/25.2.9519653"
+          rm -rf "$SDK_DIR/ndk-bundle"
+          
+          mkdir -p "$SDK_DIR/cmdline-tools"
+          cd "$SDK_DIR/cmdline-tools"
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
+          unzip -q tools.zip && rm tools.zip && mv cmdline-tools latest
+          
+          ./latest/bin/sdkmanager --install "ndk;25.1.8937393"
+          
+          echo "ANDROID_SDK_ROOT=$SDK_DIR" >> $GITHUB_ENV
+          echo "NDK_PATH=$SDK_DIR/ndk/25.1.8937393" >> $GITHUB_ENV
+
+      - name: Buat local.properties
+        run: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          echo "ndk.dir=$NDK_PATH" >> local.properties
+
+      - name: Izin Gradle
+        run: chmod +x gradlew libraries/humla/gradlew
+
+      - name: Bangun SpongyCastle
+        run: |
+          cd libraries/humla/libs/humla-spongycastle
+          ../../../../gradlew jar --no-daemon
+          cd ../../../../
+
+      # PERUBAHAN UTAMA: Ganti assembleDebug jadi assembleFossDebug
+      - name: Bangun APK FOSS DEBUG
+        run: |
+          ./gradlew :app:assembleFossDebug \
+            --stacktrace --no-daemon
+
+      # Path artifact spesifik biar tidak error upload
+      - name: Simpan APK Foss Debug
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mumla-Foss-Debug-APK
+          path: app/build/outputs/apk/foss/debug/mumla-foss-debug.apk
+          if-no-files-found: error
